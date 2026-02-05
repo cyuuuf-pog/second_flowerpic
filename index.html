@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>後測系統</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root { --primary: #4f46e5; --bg: #f3f4f6; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            background: var(--bg); margin: 0; display: flex; justify-content: center; padding: 15px;
+            -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+        }
+        .card { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 500px; position: relative; }
+        .hidden { display: none !important; }
+        h2 { text-align: center; color: #1f2937; margin-bottom: 20px; }
+        input[type="text"] { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; }
+        
+        .progress { font-size: 14px; color: #6b7280; margin-bottom: 10px; }
+        .question-text { font-size: 18px; font-weight: bold; margin-bottom: 20px; color: #111827; min-height: 54px; }
+        
+        .img-container { position: relative; width: 100%; margin-bottom: 15px; border-radius: 8px; overflow: hidden; background: #eee; height: 200px; }
+        .img-box { width: 100%; height: 100%; object-fit: contain; }
+        .img-mask { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; cursor: zoom-in; }
+
+        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .option-btn { border: 2px solid #e5e7eb; padding: 10px; border-radius: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; background: #fff; justify-content: center; transition: 0.2s; position: relative; }
+        .option-btn.has-img { height: 150px; }
+        .option-btn.no-img { min-height: 70px; }
+        .option-btn.selected { border-color: var(--primary); background: #eef2ff; color: var(--primary); font-weight: bold; }
+        
+        .option-img-wrapper { width: 100%; height: 100px; background: #f9fafb; border-radius: 4px; overflow: hidden; margin-bottom: 8px; position: relative; }
+        .option-img { width: 100%; height: 100%; object-fit: cover; }
+        .opt-mask { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; cursor: zoom-in; }
+        .opt-label { font-size: 16px; text-align: center; }
+
+        .nav-btns { display: flex; justify-content: space-between; margin-top: 25px; gap: 10px; }
+        button { padding: 12px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+        .btn-prev { background: #e5e7eb; color: #374151; flex: 1; }
+        .btn-next { background: var(--primary); color: white; flex: 2; }
+        .btn-submit { background: #10b981; color: white; flex: 2; }
+        .btn-download { background: #10b981; color: white; width: 100%; padding: 15px; font-size: 18px; font-weight: bold; margin: 20px 0; }
+
+        #lightbox { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.9); z-index: 100; justify-content: center; align-items: center; }
+        #lightbox img { max-width: 95%; max-height: 85%; }
+
+        /* 截圖區域：顯示題目敘述與填答內容 */
+        #capture-area { padding: 40px; background: white; color: black; width: 650px; }
+        .res-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .res-table td { border: 1px solid #000; padding: 10px; font-size: 14px; line-height: 1.4; vertical-align: top; }
+        .res-table thead td { font-weight: bold; background: #f0f0f0; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div id="login-screen">
+        <h2>測驗登錄</h2>
+        <input type="text" id="user-name" placeholder="請輸入姓名">
+        <input type="text" id="user-id" placeholder="請輸入學號/座號">
+        <button class="btn-next" onclick="startQuiz()" style="width:100%">開始測驗</button>
+    </div>
+
+    <div id="quiz-screen" class="hidden">
+        <div class="progress" id="progress-text">題目 1 / 20</div>
+        <div class="question-text" id="q-text"></div>
+        <div id="q-image-area"></div> 
+        <div id="options-area" class="options-grid"></div> 
+        <div class="nav-btns">
+            <button class="btn-prev" id="prev-btn" onclick="changeQuestion(-1)">上一題</button>
+            <button class="btn-next" id="next-btn" onclick="changeQuestion(1)">下一題</button>
+            <button class="btn-submit hidden" id="submit-btn" onclick="finishQuiz()">確認提交</button>
+        </div>
+    </div>
+
+    <div id="finish-screen" class="hidden" style="text-align: center;">
+        <h3>測驗完成</h3>
+        <p>請點擊下方按鈕下載作答紀錄證明：</p>
+        <button id="dl-png-btn" class="btn-download">下載作答紀錄</button>
+        <hr>
+        <p>接著請填寫 Google 表單：</p>
+        <a href="https://forms.gle/5yWV1fgRmpb7avVH8" target="_blank" style="display:inline-block; padding:12px 25px; background:var(--primary); color:white; text-decoration:none; border-radius:8px;">開啟 Google 表單</a>
+    </div>
+</div>
+
+<div id="lightbox" onclick="this.style.display='none'"><img id="lightbox-img"></div>
+
+<div style="position: absolute; left: -9999px; top: 0;">
+    <div id="capture-area">
+        <h2 style="border-bottom: 2px solid #000; padding-bottom: 10px; text-align: center;">測驗作答紀錄</h2>
+        <div id="cap-info" style="margin: 15px 0; font-size: 16px; line-height: 1.6;"></div>
+        
+        <table class="res-table">
+            <thead>
+                <tr>
+                    <td style="width: 50px;">題號</td>
+                    <td>題目敘述</td>
+                    <td style="width: 150px;">您的填答</td>
+                </tr>
+            </thead>
+            <tbody id="cap-table-body"></tbody>
+        </table>
+        
+        <p style="text-align: right; font-size: 12px; color: #333; margin-top: 20px;">
+            作答結束時間：<span id="gen-time"></span>
+        </p>
+    </div>
+</div>
+
+<script>
+const rawQuestions = [
+    { type: 1, q: "蘭科植物的的主要特徵為何？", o: ["具雄、雌蕊合生而成的蕊柱", "具有球莖", "花瓣為4的倍數", "花為肉穗花序"], a: 0 },
+    { type: 1, q: "非洲菫、大岩桐是屬於哪一科？", o: ["堇菜科", "苦苣苔科", "蘭雪花科", "茜草科"], a: 1 },
+    { type: 1, q: "黃金葛、彩葉芋、粗肋草等室內觀賞植物是屬於哪一科？", o: ["莧科", "胡椒科", "百合科", "天南星科"], a: 3 },
+    { type: 1, q: "下列何者為木本植物？", o: ["桂花", "金絲竹", "旅人蕉", "大王椰子"], a: 0 },
+    { type: 1, q: "下列何種觀賞植物為灌木類？", o: ["旅人蕉", "桂花", "風鈴木", "竹芋"], a: 1 },
+    { type: 1, q: "下列何種植物屬於大喬木，不適合種植於混擬土花台中？", o: ["緬梔", "黃椰子", "榕樹", "龍柏"], a: 2 },
+    { type: 1, q: "何種植物又被稱為四色樹？", o: ["鳳凰木", "台灣欒樹", "藍花楹", "美人樹"], a: 1 },
+    { type: 1, q: "何種植物又稱重陽木？", o: ["相思樹", "茄苳", "榕樹", "苦楝"], a: 1 },
+    { type: 1, q: "何種植物為針葉樹？", o: ["小葉南洋杉", "榕樹", "緬梔", "藍花楹"], a: 0 },
+    { type: 1, q: "何種植物的果實會有棉絮？", o: ["台灣欒樹", "大花紫薇", "桃花心木", "木棉"], a: 3 },
+    { type: 2, q: "下圖是何種植物？", img: "11.jpg", o: ["菊花", "金盞花", "黃波絲菊", "孔雀草"], a: 3 },
+    { type: 2, q: "下圖是何種植物？", img: "12.jpeg", o: ["百日草", "大波斯菊", "萬壽菊", "黃帝菊"], a: 1 },
+    { type: 2, q: "下圖是何種植物？", img: "13.jpeg", o: ["朱槿", "木槿", "月橘", "樹蘭"], a: 2 },
+    { type: 2, q: "下圖是何種植物？", img: "14.jpeg", o: ["小葉南洋杉", "肯氏南洋杉", "白千層", "相思樹"], a: 2 },
+    { type: 2, q: "下圖是何種植物？", img: "15.jpg", o: ["粉萼鼠尾草", "薰衣草", "松葉牡丹", "馬齒牡丹"], a: 2 },
+    { type: 3, q: "下列選項何者是小葉南洋杉？", o: ["16-A.jpg", "16-B.jpeg", "16-C.jpeg", "16-D.jpeg"], a: 1 },
+    { type: 3, q: "下列選項何者是大波斯菊？", o: ["17-A.jpeg", "17-B.jpg", "17-C.jpg", "17-D.jpg"], a: 3 },
+    { type: 3, q: "下列選項何者是美人樹？", o: ["18-A.jpeg", "18-B.jpg", "18-C.jpg", "18-D.jpg"], a: 0 },
+    { type: 3, q: "下列選項何者是桂花？", o: ["19-A.jpeg", "19-B.jpg", "19-C.jpg", "19-D.jpg"], a: 0 },
+    { type: 3, q: "下列選項何者是薰衣草？", o: ["20-A.jpg", "20-B.jpg", "20-C.jpeg", "20-D.jpg"], a: 2 }
+];
+
+let questions = [];
+let currentIndex = 0;
+let userAnswers = new Array(20).fill(null);
+let userName = "", userId = "";
+const labels = ["A", "B", "C", "D"];
+
+function shuffle(arr) { return arr.sort(() => Math.random() - 0.5); }
+
+function startQuiz() {
+    userName = document.getElementById('user-name').value.trim();
+    userId = document.getElementById('user-id').value.trim();
+    if(!userName || !userId) return alert("請輸入完整資訊");
+    questions = shuffle([...rawQuestions]);
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('quiz-screen').classList.remove('hidden');
+    render();
+}
+
+function render() {
+    const q = questions[currentIndex];
+    document.getElementById('progress-text').innerText = `題目 ${currentIndex + 1} / 20`;
+    document.getElementById('q-text').innerText = q.q;
+    const imgArea = document.getElementById('q-image-area');
+    imgArea.innerHTML = q.type === 2 ? `<div class="img-container"><img src="${q.img}" class="img-box"><div class="img-mask" onclick="openLightbox('${q.img}')"></div></div>` : "";
+    
+    const optArea = document.getElementById('options-area');
+    optArea.innerHTML = "";
+    q.o.forEach((opt, i) => {
+        const btn = document.createElement('div');
+        btn.className = `option-btn ${q.type === 3 ? 'has-img' : 'no-img'} ${userAnswers[currentIndex] === i ? 'selected' : ''}`;
+        if(q.type === 3) {
+            btn.innerHTML = `<div class="option-img-wrapper"><img src="${opt}" class="option-img"><div class="opt-mask" onclick="event.stopPropagation(); openLightbox('${opt}')"></div></div><div class="opt-label">(${labels[i]})</div>`;
+        } else {
+            btn.innerHTML = `<div class="opt-label">(${labels[i]}) ${opt}</div>`;
+        }
+        btn.onclick = () => { userAnswers[currentIndex] = i; render(); };
+        optArea.appendChild(btn);
+    });
+
+    document.getElementById('prev-btn').style.visibility = currentIndex === 0 ? 'hidden' : 'visible';
+    if(currentIndex === 19) {
+        document.getElementById('next-btn').classList.add('hidden');
+        document.getElementById('submit-btn').classList.remove('hidden');
+    } else {
+        document.getElementById('next-btn').classList.remove('hidden');
+        document.getElementById('submit-btn').classList.add('hidden');
+    }
+}
+
+function changeQuestion(step) { currentIndex += step; render(); }
+function openLightbox(src) { document.getElementById('lightbox-img').src = src; document.getElementById('lightbox').style.display = 'flex'; }
+
+async function finishQuiz() {
+    if(userAnswers.includes(null)) return alert("還有題目沒寫完喔！");
+    document.getElementById('quiz-screen').classList.add('hidden');
+    document.getElementById('finish-screen').classList.remove('hidden');
+
+    document.getElementById('cap-info').innerHTML = `姓名：${userName} &nbsp;&nbsp; 學號/座號：${userId}`;
+    document.getElementById('gen-time').innerText = new Date().toLocaleString();
+    
+    // 生成紀錄表格
+    let tableHtml = "";
+    questions.forEach((q, i) => {
+        const userSelect = q.o[userAnswers[i]];
+        // 如果是圖片選項題，顯示檔名；文字題則顯示選項文字
+        const ansLabel = `(${labels[userAnswers[i]]}) ${userSelect}`;
+        tableHtml += `<tr>
+            <td style="text-align:center;">${i+1}</td>
+            <td>${q.q}</td>
+            <td>${ansLabel}</td>
+        </tr>`;
+    });
+    document.getElementById('cap-table-body').innerHTML = tableHtml;
+
+    document.getElementById('dl-png-btn').onclick = async function() {
+        this.innerText = "生成中...";
+        try {
+            const canvas = await html2canvas(document.getElementById('capture-area'), { 
+                scale: 2,
+                backgroundColor: "#ffffff"
+            });
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL("image/png");
+            link.download = `${userName}_作答紀錄.png`;
+            link.click();
+            this.innerText = "下載成功";
+        } catch (e) {
+            alert("請手動截圖保留此畫面。");
+            this.innerText = "下載作答紀錄圖";
+        }
+    };
+}
+document.addEventListener('contextmenu', e => e.preventDefault());
+</script>
+</body>
+</html>
